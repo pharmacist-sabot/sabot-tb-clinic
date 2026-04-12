@@ -9,8 +9,8 @@ import {
   Settings,
   Database,
   WifiOff,
-  HeartPulse,
 } from 'lucide-vue-next'
+import TbClinicLogo from '@/components/shared/TbClinicLogo.vue'
 import { useAlertStore } from '@/stores/alerts'
 import { useSettingsStore } from '@/stores/settings'
 
@@ -47,11 +47,11 @@ const isConnected = computed(() => settingsStore.isConnected)
     <!-- Branding -->
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <HeartPulse :size="22" stroke-width="2" class="logo-icon" />
+        <TbClinicLogo :size="40" />
       </div>
       <div class="sidebar-brand">
         <span class="brand-title">TB Clinic</span>
-        <span class="brand-sub">สาธารณสุข</span>
+        <span class="brand-sub">โรงพยาบาลสระโบสถ์</span>
       </div>
     </div>
 
@@ -123,18 +123,12 @@ const isConnected = computed(() => settingsStore.isConnected)
 }
 
 .sidebar-logo {
-  width: 36px;
-  height: 36px;
-  background: var(--color-blue);
-  border-radius: var(--radius-md);
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.logo-icon {
-  color: #ffffff;
 }
 
 .sidebar-brand {
