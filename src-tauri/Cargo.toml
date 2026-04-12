@@ -1,0 +1,37 @@
+[package]
+name = "sabot-tb-clinic"
+version = "0.1.0"
+description = "TB Clinic Management System for Sarabosot Hospital"
+authors = ["Suradet Pratomsak"]
+license = "MIT"
+repository = ""
+default-run = "sabot-tb-clinic"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "sabot_tb_clinic_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "sabot-tb-clinic"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+sqlx = { version = "0.8", features = ["mysql", "sqlite", "runtime-tokio", "chrono"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
