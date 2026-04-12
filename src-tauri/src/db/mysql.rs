@@ -246,8 +246,8 @@ pub async fn get_patient_demographics(
             CONCAT(COALESCE(p.pname, ''), p.fname, ' ', p.lname) AS full_name, \
             TIMESTAMPDIFF(YEAR, p.birthday, CURDATE()) AS age, \
             p.sex, \
-            p.addrpart AS address, \
-            p.phone, \
+            p.informaddr AS address, \
+            p.hometel AS phone, \
             DATE_FORMAT(p.birthday, '%Y-%m-%d') AS birthday \
         FROM patient p \
         WHERE p.hn = ?",
