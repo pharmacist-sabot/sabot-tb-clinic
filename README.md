@@ -9,7 +9,7 @@
 [![Lucide](https://img.shields.io/badge/Lucide-%5E0.400.0-F92672?logo=lucide&logoColor=ffffff)](https://lucide.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A modern desktop application built with Tauri (Rust) and Vue (TypeScript) for managing tuberculosis (TB) clinic operations at Sasot Hospital. This system bridges HOSxP's MySQL database (read-only) with a local SQLite database for clinic-specific tracking data.
+A modern desktop application built with Tauri (Rust) and Vue (TypeScript) for managing tuberculosis (TB) clinic operations at Sabot Hospital. This system bridges HOSxP's MySQL database (read-only) with a local SQLite database for clinic-specific tracking data.
 
 ## Features
 
