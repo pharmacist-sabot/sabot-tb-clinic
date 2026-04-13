@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sabot-tb-clinic",
+  "productName": "Sabot TB Clinic",
   "version": "0.1.0",
   "identifier": "com.sarabosot.tb-clinic",
   "build": {
