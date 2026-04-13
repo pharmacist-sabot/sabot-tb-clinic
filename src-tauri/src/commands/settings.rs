@@ -125,9 +125,16 @@ pub async fn save_db_config(sqlite: State<'_, SqlitePool>, config: DbConfig) -> 
   }
 
   // Password goes to the OS keychain (never stored in SQLite)
+  // MacOS Keychain does not support storing empty strings, so we use a placeholder.
+  let password_to_save = if config.password.is_empty() {
+    "__SABOT_EMPTY_PASSWORD__"
+  } else {
+    &config.password
+  };
+
   let entry = keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT).map_err(|e| e.to_string())?;
   entry
-    .set_password(&config.password)
+    .set_password(password_to_save)
     .map_err(|e| e.to_string())?;
 
   Ok(())
@@ -198,13 +205,17 @@ pub async fn load_config_from_sqlite(pool: &SqlitePool) -> AnyhowResult<Option<D
   }
 
   // Retrieve password from OS keychain; any error → treat as not-saved
-  let password = match keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT) {
+  let mut password = match keyring::Entry::new(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT) {
     Ok(entry) => match entry.get_password() {
       Ok(p) => p,
       Err(_) => return Ok(None),
     },
     Err(_) => return Ok(None),
   };
+
+  if password == "__SABOT_EMPTY_PASSWORD__" {
+    password = String::new();
+  }
 
   let port: u16 = values
     .get("mysql_port")
