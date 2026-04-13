@@ -95,7 +95,7 @@ const isConnected = computed(() => settingsStore.isConnected)
         </span>
         <span class="conn-dot" />
       </div>
-      <div class="sidebar-app-ver">Sarabosot Hospital · v0.1</div>
+      <div class="sidebar-app-ver">@2026 Sabot Hospital</div>
     </div>
   </aside>
 </template>
