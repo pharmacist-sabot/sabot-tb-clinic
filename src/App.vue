@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted } from 'vue'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import { useAlertStore } from '@/stores/alerts'
@@ -16,6 +17,16 @@ const appointmentsStore = useAppointmentsStore()
 let startupRetryTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
+  // ── Flash prevention (Windows) ─────────────────────────────────────
+  // tauri.windows.conf.json sets visible:false so the native OS window
+  // stays hidden while WebView2 initialises (~600-900 ms on Windows).
+  // By the time onMounted fires the HTML splash overlay is already painted
+  // in the DOM, so calling show() here reveals a fully-rendered splash card
+  // instead of a blinding white rectangle.
+  // On macOS / Linux the window is already visible (visible:true in
+  // tauri.conf.json), so this call is a harmless no-op on those platforms.
+  await getCurrentWindow().show()
+
   // Record when init starts so we can enforce a minimum splash display time
   const splashStart = Date.now()
 
