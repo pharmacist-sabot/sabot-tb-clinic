@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { RefreshCw, Users, AlertTriangle, CheckCircle, Loader2, Activity } from 'lucide-vue-next'
+import {
+  RefreshCw,
+  Users,
+  AlertTriangle,
+  CheckCircle,
+  Loader2,
+  Activity,
+  Search,
+} from 'lucide-vue-next'
 import PatientCard from '@/components/active/PatientCard.vue'
 import { usePatientStore } from '@/stores/patient'
 import { useAlertStore } from '@/stores/alerts'
@@ -44,6 +52,19 @@ const sortedPatients = computed<ActivePatientRow[]>(() => {
     default:
       return list.sort((a, b) => alertWeight(a) - alertWeight(b))
   }
+})
+
+// ── Search ──
+const searchQuery = ref('')
+
+const filteredPatients = computed<ActivePatientRow[]>(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return sortedPatients.value
+  return sortedPatients.value.filter((p) => {
+    const hn = p.tb_patient.hn.toLowerCase()
+    const name = (p.demographics?.full_name ?? '').toLowerCase()
+    return hn.includes(q) || name.includes(q)
+  })
 })
 
 const statsTotal = computed(() => patientStore.activePatients.length)
@@ -147,7 +168,7 @@ const isInitialLoad = computed(
       </div>
     </div>
 
-    <!-- ── Sort bar ── -->
+    <!-- ── Sort bar + Search ── -->
     <div class="sort-bar">
       <span class="sort-label">เรียงตาม:</span>
       <div class="sort-pills">
@@ -161,6 +182,24 @@ const isInitialLoad = computed(
           {{ opt.label }}
         </button>
       </div>
+
+      <!-- Search input pushed to the right of the sort bar -->
+      <div class="search-wrap">
+        <Search :size="14" :stroke-width="2" class="search-icon" />
+        <input
+          v-model="searchQuery"
+          type="text"
+          class="search-input"
+          placeholder="ค้นหา HN หรือชื่อผู้ป่วย..."
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+    </div>
+
+    <!-- ── Search result count (visible only when a query is active) ── -->
+    <div v-if="searchQuery.trim()" class="search-result-count">
+      แสดง <strong>{{ filteredPatients.length }}</strong> จาก {{ sortedPatients.length }} ราย
     </div>
 
     <!-- ── Loading state (initial) ── -->
@@ -200,9 +239,17 @@ const isInitialLoad = computed(
 
     <!-- ── Patient grid ── -->
     <div v-else class="patient-grid">
-      <TransitionGroup name="card" tag="div" class="patient-grid-inner">
+      <!-- Inline no-results state when search returns zero matches -->
+      <div
+        v-if="filteredPatients.length === 0 && searchQuery.trim()"
+        class="search-empty"
+      >
+        ไม่พบผู้ป่วยที่ตรงกับการค้นหา
+      </div>
+
+      <TransitionGroup v-else name="card" tag="div" class="patient-grid-inner">
         <PatientCard
-          v-for="patient in sortedPatients"
+          v-for="patient in filteredPatients"
           :key="patient.tb_patient.hn"
           :patient="patient"
           @view-detail="(hn) => $router.push(`/patient/${hn}`)"
@@ -390,12 +437,13 @@ const isInitialLoad = computed(
   margin-top: 1px;
 }
 
-/* ── Sort bar ── */
+/* ── Sort bar (with search input merged in) ── */
 .sort-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
 }
 
 .sort-label {
@@ -434,6 +482,73 @@ const isInitialLoad = computed(
   color: var(--color-blue);
   border-color: rgba(0, 117, 222, 0.3);
   font-weight: 600;
+}
+
+/* ── Search input wrapper ── */
+.search-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  border: 1px solid #dddddd;
+  border-radius: 4px;
+  padding: 6px 10px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.search-wrap:focus-within {
+  border-color: #097fe8;
+  box-shadow: 0 0 0 3px rgba(9, 127, 232, 0.15);
+}
+
+.search-icon {
+  color: #a39e98;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  width: 220px;
+  min-width: 0;
+}
+
+.search-input::placeholder {
+  color: #a39e98;
+  font-weight: 400;
+}
+
+/* ── Search result count line ── */
+.search-result-count {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 14px;
+  padding-left: 1px;
+  line-height: 1;
+}
+
+.search-result-count strong {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+/* ── Inline search empty state (inside the grid area) ── */
+.search-empty {
+  text-align: center;
+  padding: 56px 16px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+  font-family: var(--font);
+  letter-spacing: 0;
 }
 
 /* ── State containers ── */

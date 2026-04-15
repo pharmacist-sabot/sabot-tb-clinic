@@ -10,6 +10,7 @@ import {
   Settings,
   Database,
   WifiOff,
+  Info,
 } from 'lucide-vue-next'
 import TbClinicLogo from '@/components/shared/TbClinicLogo.vue'
 import { useAlertStore } from '@/stores/alerts'
@@ -36,6 +37,7 @@ const navItems: NavItem[] = [
   { path: '/appointments', label: 'การนัดหมาย', icon: CalendarDays, showApptCount: true },
   { path: '/reports', label: 'รายงาน', icon: BarChart2 },
   { path: '/settings', label: 'ตั้งค่า', icon: Settings },
+  { path: '/about', label: 'เกี่ยวกับโปรแกรม', icon: Info },
 ]
 
 function isActive(path: string): boolean {

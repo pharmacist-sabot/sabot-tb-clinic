@@ -6,6 +6,7 @@ import PatientDetailView from '@/views/PatientDetailView.vue'
 import ReportsView from '@/views/ReportsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import AppointmentsView from '@/views/AppointmentsView.vue'
+import AboutView from '@/views/AboutView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -56,6 +57,12 @@ const router = createRouter({
       name: 'settings',
       component: SettingsView,
       meta: { title: 'ตั้งค่า' },
+    },
+    {
+      path: '/about',
+      name: 'about',
+      component: AboutView,
+      meta: { title: 'เกี่ยวกับโปรแกรม' },
     },
   ],
 })
