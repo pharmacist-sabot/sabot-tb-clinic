@@ -95,6 +95,7 @@ pub async fn get_active_patients(
       current_month,
       total_months,
       days_since_last_dispensing: days_since_last,
+      outcome_value: None,
       alerts,
     });
   }
@@ -222,10 +223,10 @@ pub async fn get_patient_detail(
 }
 
 // ---------------------------------------------------------------------------
-// Private alert helper — shared by get_active_patients and get_patient_detail
+// Shared alert helper — pub(crate) so alerts.rs can call it directly
 // ---------------------------------------------------------------------------
 
-async fn compute_alerts_for_patient(
+pub(crate) async fn compute_alerts_for_patient(
   hn: &str,
   current_plan: &Option<TreatmentPlan>,
   current_month: Option<i64>,
@@ -234,7 +235,6 @@ async fn compute_alerts_for_patient(
   mysql_pool: Option<&sqlx::MySqlPool>,
   sqlite: &SqlitePool,
 ) -> Vec<PatientAlert> {
-  let _ = sqlite; // reserved for future SQLite-side alert queries
   let mut alerts = Vec::new();
   let today = Local::now().date_naive();
 
@@ -264,37 +264,96 @@ async fn compute_alerts_for_patient(
     }
   }
 
-  // 3. Ethambutol overrun & phase-transition alerts (requires MySQL)
+  // ── Resolve intensive phase end date ───────────────────────────────────────
+  // Required for BOTH the E-overrun and phase-transition checks.
+  // When the current SQLite plan is still "intensive", use its own end date.
+  // When it has been transitioned to "continuation", query the archived
+  // intensive plan row (is_current = 0) from SQLite.
+  let intensive_end_str: Option<String> = match current_plan {
+    Some(plan) if plan.phase == "intensive" => plan.phase_end_expected.clone(),
+    _ => db::sqlite::get_intensive_phase_end(sqlite, hn)
+      .await
+      .ok()
+      .flatten(),
+  };
+  let intensive_end_date = intensive_end_str
+    .as_deref()
+    .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
   if let Some(pool) = mysql_pool {
-    // 3a. Patient is in continuation phase but E was dispensed recently
-    if let Some(plan) = current_plan {
-      if plan.phase == "continuation" {
+    // 3a. Ethambutol overrun — E was dispensed AFTER the intensive phase end date.
+    //     Fires regardless of whether the SQLite plan record has been updated,
+    //     because the clinical risk exists whether the record is current or not.
+    if let Some(end_date) = intensive_end_date {
+      if today > end_date {
         if let Ok(true) = db::mysql::was_ethambutol_dispensed_recently(pool, hn, 30).await {
           alerts.push(PatientAlert {
             hn: hn.to_string(),
             alert_type: "ethambutol_overrun".to_string(),
             severity: "red".to_string(),
             message: "ได้รับ Ethambutol เกินระยะ Intensive Phase".to_string(),
-            details: None,
+            details: intensive_end_str
+              .as_deref()
+              .map(|s| format!("ระยะ Intensive สิ้นสุด: {}", s)),
           });
         }
       }
     }
 
-    // 3b. Still in intensive phase but expected end date has passed
+    // 3b. Phase-transition check: current SQLite plan is STILL "intensive"
+    //     but the expected end date has passed.
+    //
+    //     Cross-reference HOSxP dispensing to distinguish two situations:
+    //       • Z/E dispensed recently  → patient still on intensive drugs
+    //                                   → "phase_transition" alert (due for switch)
+    //       • Z/E NOT dispensed recently → patient evidently already on H+R only
+    //                                   → "phase_not_updated" alert (update the record)
     if let Some(plan) = current_plan {
       if plan.phase == "intensive" {
-        if let Some(end_str) = &plan.phase_end_expected {
-          if let Ok(end_date) = NaiveDate::parse_from_str(end_str, "%Y-%m-%d") {
-            if today > end_date {
-              alerts.push(PatientAlert {
-                hn: hn.to_string(),
-                alert_type: "phase_transition".to_string(),
-                severity: "yellow".to_string(),
-                message: "ถึงเวลาเปลี่ยนเป็น Continuation Phase".to_string(),
-                details: Some(format!("Phase end expected: {}", end_str)),
-              });
-            }
+        if let Some(end_date) = intensive_end_date {
+          if today > end_date {
+            // Default to true (conservative: assume still intensive) if MySQL unavailable
+            let ze_recent = db::mysql::was_ze_dispensed_recently(pool, hn, 35)
+              .await
+              .unwrap_or(true);
+
+            let (alert_type, message) = if ze_recent {
+              ("phase_transition", "ถึงเวลาเปลี่ยนเป็น Continuation Phase")
+            } else {
+              (
+                "phase_not_updated",
+                "ผู้ป่วยอยู่ในระยะ Continuation แล้ว — กรุณาอัปเดตแผนการรักษาในระบบ",
+              )
+            };
+
+            alerts.push(PatientAlert {
+              hn: hn.to_string(),
+              alert_type: alert_type.to_string(),
+              severity: "yellow".to_string(),
+              message: message.to_string(),
+              details: intensive_end_str
+                .as_deref()
+                .map(|s| format!("ระยะ Intensive สิ้นสุด: {}", s)),
+            });
+          }
+        }
+      }
+    }
+  } else {
+    // No MySQL — fire phase-transition alert based on date alone (conservative).
+    if let Some(plan) = current_plan {
+      if plan.phase == "intensive" {
+        if let Some(end_date) = intensive_end_date {
+          if today > end_date {
+            alerts.push(PatientAlert {
+              hn: hn.to_string(),
+              alert_type: "phase_transition".to_string(),
+              severity: "yellow".to_string(),
+              message: "ถึงเวลาเปลี่ยนเป็น Continuation Phase".to_string(),
+              details: intensive_end_str
+                .as_deref()
+                .map(|s| format!("ระยะ Intensive สิ้นสุด: {}", s)),
+            });
           }
         }
       }
@@ -357,6 +416,12 @@ pub async fn get_discharged_patients(
 
     let total_months = Some(all_plans.iter().map(|p| p.duration_months).sum::<i64>());
 
+    let outcome_value = db::sqlite::get_outcome(&sqlite, &patient.hn)
+      .await
+      .ok()
+      .flatten()
+      .map(|o| o.outcome);
+
     rows.push(ActivePatientRow {
       tb_patient: patient,
       demographics,
@@ -364,6 +429,7 @@ pub async fn get_discharged_patients(
       current_month: None,
       total_months,
       days_since_last_dispensing: None,
+      outcome_value,
       alerts: vec![],
     });
   }

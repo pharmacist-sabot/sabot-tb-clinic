@@ -67,8 +67,7 @@ pub fn run() {
         let _ = app_handle_clone.emit("splash-status", "กำลังโหลดฐานข้อมูล...");
 
         // ── 3b. Attempt MySQL auto-connect ────────────────────────────────
-        let connect_result =
-          crate::commands::settings::load_config_from_sqlite(&sqlite_pool).await;
+        let connect_result = crate::commands::settings::load_config_from_sqlite(&sqlite_pool).await;
 
         match connect_result {
           Ok(Some(config)) => {
@@ -83,9 +82,7 @@ pub fn run() {
             // never indefinitely blocked when the server is unreachable.
             let pool_result = tokio::time::timeout(
               std::time::Duration::from_secs(8),
-              MySqlPoolOptions::new()
-                .max_connections(5)
-                .connect(&url),
+              MySqlPoolOptions::new().max_connections(5).connect(&url),
             )
             .await;
 
@@ -101,20 +98,17 @@ pub fn run() {
               }
               Ok(Err(e)) => {
                 eprintln!("[sabot] Auto-connect to MySQL failed: {e}");
-                let _ = app_handle_clone
-                  .emit("splash-status", "เชื่อมต่อล้มเหลว (ใช้งานออฟไลน์ได้)");
+                let _ = app_handle_clone.emit("splash-status", "เชื่อมต่อล้มเหลว (ใช้งานออฟไลน์ได้)");
               }
               Err(_) => {
                 eprintln!("[sabot] MySQL auto-connect timed out after 8 s");
-                let _ = app_handle_clone
-                  .emit("splash-status", "เชื่อมต่อหมดเวลา (ใช้งานออฟไลน์ได้)");
+                let _ = app_handle_clone.emit("splash-status", "เชื่อมต่อหมดเวลา (ใช้งานออฟไลน์ได้)");
               }
             }
           }
           Ok(None) => {
             // No saved config — normal on first run, nothing to do.
-            let _ =
-              app_handle_clone.emit("splash-status", "พร้อมใช้งาน (ยังไม่ตั้งค่า MySQL)");
+            let _ = app_handle_clone.emit("splash-status", "พร้อมใช้งาน (ยังไม่ตั้งค่า MySQL)");
           }
           Err(e) => {
             eprintln!("[sabot] Failed to load saved DB config: {e}");

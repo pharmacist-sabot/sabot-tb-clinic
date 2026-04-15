@@ -12,23 +12,39 @@ onMounted(() => {
 
 const total = computed(() => patientStore.dischargedPatients.length)
 
-function getOutcomeLabel(status: string): string {
-  switch (status) {
-    case 'completed': return 'รักษาครบ'
-    case 'transferred': return 'ส่งต่อ'
-    case 'died': return 'เสียชีวิต'
-    case 'defaulted': return 'ขาดการรักษา'
-    default: return status
+function getOutcomeLabel(p: import('@/types/patient').ActivePatientRow): string {
+  const outcome = p.outcome_value ?? p.tb_patient.status
+  switch (outcome) {
+    case 'cured':               return 'หาย'
+    case 'treatment_completed': return 'รักษาครบ'
+    case 'treatment_failed':    return 'รักษาล้มเหลว'
+    case 'died':                return 'เสียชีวิต'
+    case 'lost_to_followup':    return 'ขาดการรักษา'
+    case 'transferred_out':     return 'ส่งต่อ'
+    case 'not_evaluated':       return 'ไม่ได้ประเมิน'
+    // Fallback for legacy tb_patients.status values
+    case 'completed':           return 'รักษาครบ'
+    case 'transferred':         return 'ส่งต่อ'
+    case 'defaulted':           return 'ขาดการรักษา'
+    default:                    return outcome
   }
 }
 
-function getOutcomeColor(status: string): string {
-  switch (status) {
-    case 'completed': return '#2a9d99'
-    case 'transferred': return '#0075de'
-    case 'died': return '#dd5b00'
-    case 'defaulted': return '#dd5b00'
-    default: return '#a39e98'
+function getOutcomeColor(p: import('@/types/patient').ActivePatientRow): string {
+  const outcome = p.outcome_value ?? p.tb_patient.status
+  switch (outcome) {
+    case 'cured':               return '#1aae39'
+    case 'treatment_completed': return '#2a9d99'
+    case 'treatment_failed':    return '#dd5b00'
+    case 'died':                return '#615d59'
+    case 'lost_to_followup':    return '#dd5b00'
+    case 'transferred_out':     return '#0075de'
+    case 'not_evaluated':       return '#a39e98'
+    // Fallback for legacy tb_patients.status values
+    case 'completed':           return '#2a9d99'
+    case 'transferred':         return '#0075de'
+    case 'defaulted':           return '#dd5b00'
+    default:                    return '#a39e98'
   }
 }
 
@@ -92,7 +108,10 @@ function getTbTypeLabel(tbType: string | null | undefined): string {
         </div>
         <div class="stat-body">
           <div class="stat-num stat-num-teal">
-            {{ patientStore.dischargedPatients.filter(p => p.tb_patient.status === 'completed').length }}
+            {{ patientStore.dischargedPatients.filter(p => {
+              const o = p.outcome_value ?? p.tb_patient.status
+              return o === 'cured' || o === 'treatment_completed' || o === 'completed'
+            }).length }}
           </div>
           <div class="stat-label">รักษาครบ</div>
         </div>
@@ -104,7 +123,10 @@ function getTbTypeLabel(tbType: string | null | undefined): string {
         </div>
         <div class="stat-body">
           <div class="stat-num stat-num-orange">
-            {{ patientStore.dischargedPatients.filter(p => p.tb_patient.status === 'defaulted' || p.tb_patient.status === 'died').length }}
+            {{ patientStore.dischargedPatients.filter(p => {
+              const o = p.outcome_value ?? p.tb_patient.status
+              return o === 'died' || o === 'lost_to_followup' || o === 'treatment_failed' || o === 'not_evaluated' || o === 'defaulted'
+            }).length }}
           </div>
           <div class="stat-label">ขาดยา/เสียชีวิต</div>
         </div>
@@ -116,7 +138,10 @@ function getTbTypeLabel(tbType: string | null | undefined): string {
         </div>
         <div class="stat-body">
           <div class="stat-num stat-num-gray">
-            {{ patientStore.dischargedPatients.filter(p => p.tb_patient.status === 'transferred').length }}
+            {{ patientStore.dischargedPatients.filter(p => {
+              const o = p.outcome_value ?? p.tb_patient.status
+              return o === 'transferred_out' || o === 'transferred'
+            }).length }}
           </div>
           <div class="stat-label">ส่งต่อ</div>
         </div>
@@ -177,11 +202,11 @@ function getTbTypeLabel(tbType: string | null | undefined): string {
               <span
                 class="outcome-badge"
                 :style="{
-                  background: getOutcomeColor(p.tb_patient.status) + '18',
-                  color: getOutcomeColor(p.tb_patient.status),
+                  background: getOutcomeColor(p) + '18',
+                  color: getOutcomeColor(p),
                 }"
               >
-                {{ getOutcomeLabel(p.tb_patient.status) }}
+                {{ getOutcomeLabel(p) }}
               </span>
             </td>
             <td class="td-action">

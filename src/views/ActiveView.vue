@@ -13,6 +13,7 @@ import PatientCard from '@/components/active/PatientCard.vue'
 import { usePatientStore } from '@/stores/patient'
 import { useAlertStore } from '@/stores/alerts'
 import type { ActivePatientRow } from '@/types/patient'
+import type { TreatmentPlan } from '@/types/treatment'
 
 const patientStore = usePatientStore()
 const alertStore = useAlertStore()
@@ -67,16 +68,26 @@ const filteredPatients = computed<ActivePatientRow[]>(() => {
   })
 })
 
+// ── Effective phase helper (mirrors PatientCard logic) ──
+// A plan is "effectively continuation" when the stored phase is still
+// "intensive" but today has already passed phase_end_expected.
+function getEffectivePhase(plan: TreatmentPlan | null | undefined): 'intensive' | 'continuation' | null {
+  if (!plan) return null
+  if (plan.phase === 'intensive' && plan.phase_end_expected) {
+    if (new Date() > new Date(plan.phase_end_expected)) return 'continuation'
+  }
+  return plan.phase as 'intensive' | 'continuation'
+}
+
 const statsTotal = computed(() => patientStore.activePatients.length)
 const statsRedAlerts = computed(() => alertStore.redCount)
 const statsYellowAlerts = computed(() => alertStore.yellowAlerts.length)
 
 const statsIntensive = computed(
-  () => patientStore.activePatients.filter((p) => p.current_plan?.phase === 'intensive').length,
+  () => patientStore.activePatients.filter((p) => getEffectivePhase(p.current_plan) === 'intensive').length,
 )
 const statsContinuation = computed(
-  () =>
-    patientStore.activePatients.filter((p) => p.current_plan?.phase === 'continuation').length,
+  () => patientStore.activePatients.filter((p) => getEffectivePhase(p.current_plan) === 'continuation').length,
 )
 
 const isInitialLoad = computed(

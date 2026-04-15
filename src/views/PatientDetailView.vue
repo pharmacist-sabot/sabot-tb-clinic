@@ -93,10 +93,30 @@ const currentTreatmentMonth = computed<number | undefined>(() => {
   return Math.max(1, Math.floor(diffDays / 30.44) + 1)
 })
 
-/** Drug letters in the current treatment plan */
+// Effective phase: derives from date comparison, not just the SQLite record.
+// If the intensive phase end date has passed but the plan was never updated,
+// we still show "Continuation" so staff see the correct clinical picture.
+const effectivePhase = computed<'intensive' | 'continuation' | null>(() => {
+  const plan = detail.value?.current_plan
+  if (!plan) return null
+  if (plan.phase === 'intensive' && plan.phase_end_expected) {
+    if (new Date() > new Date(plan.phase_end_expected)) return 'continuation'
+  }
+  return plan.phase as 'intensive' | 'continuation'
+})
+
+// True when the plan record hasn't been updated but phase has changed by date.
+const phaseIsStale = computed(
+  () => !!detail.value?.current_plan && effectivePhase.value !== detail.value.current_plan.phase,
+)
+
+/** Drug letters to display — uses effective continuation drugs when plan is stale */
 const currentDrugs = computed<string[]>(() => {
   const plan = detail.value?.current_plan
   if (!plan) return []
+  if (phaseIsStale.value) {
+    return getContinuationDrugsFromRegimen(plan.regimen)
+  }
   try {
     const arr = JSON.parse(plan.drugs ?? '[]') as string[]
     return Array.isArray(arr) ? arr : []
@@ -106,16 +126,14 @@ const currentDrugs = computed<string[]>(() => {
 })
 
 const phaseLabel = computed(() => {
-  const phase = detail.value?.current_plan?.phase
-  if (phase === 'intensive')    return 'ระยะเข้มข้น (Intensive)'
-  if (phase === 'continuation') return 'ระยะต่อเนื่อง (Continuation)'
+  if (effectivePhase.value === 'intensive')    return 'ระยะเข้มข้น (Intensive)'
+  if (effectivePhase.value === 'continuation') return 'ระยะต่อเนื่อง (Continuation)'
   return null
 })
 
 const phaseColor = computed(() => {
-  const phase = detail.value?.current_plan?.phase
-  if (phase === 'intensive')    return '#dd5b00'
-  if (phase === 'continuation') return '#2a9d99'
+  if (effectivePhase.value === 'intensive')    return '#dd5b00'
+  if (effectivePhase.value === 'continuation') return '#2a9d99'
   return '#a39e98'
 })
 
@@ -154,6 +172,14 @@ function toThaiDate(iso: string | null | undefined): string {
 function sexLabel(sex: string | null | undefined): string | null {
   if (!sex) return null
   return sex === 'M' || sex === '1' ? '♂ ชาย' : '♀ หญิง'
+}
+
+/** Parse regimen string "2HRZE/4HR" → continuation drug letters ["H","R"] */
+function getContinuationDrugsFromRegimen(regimen: string): string[] {
+  const parts = regimen.split('/')
+  if (parts.length < 2) return ['H', 'R']
+  const contPart = parts[1].replace(/^\d+/, '')
+  return (['H', 'R', 'Z', 'E'] as const).filter((d) => contPart.toUpperCase().includes(d))
 }
 </script>
 
@@ -315,8 +341,10 @@ function sexLabel(sex: string | null | undefined): string | null {
               v-if="phaseLabel"
               class="phase-badge"
               :style="{ background: phaseColor + '1a', color: phaseColor }"
+              :title="phaseIsStale ? 'ระยะนี้อ้างอิงจากวันที่ — แผนการรักษาในระบบยังไม่ได้อัปเดต' : undefined"
             >
               {{ phaseLabel }}
+              <span v-if="phaseIsStale" class="phase-stale-dot">*</span>
             </span>
             <div
               v-if="currentDrugs.length > 0"
@@ -331,6 +359,9 @@ function sexLabel(sex: string | null | undefined): string | null {
               />
             </div>
           </div>
+          <p v-if="phaseIsStale" class="stale-plan-note">
+            * แสดงยาตามระยะที่คาดจากวันที่ — แผนการรักษายังไม่ได้อัปเดต
+          </p>
         </div>
 
         <!-- Right: status badge + enrollment meta -->
@@ -1114,5 +1145,20 @@ function sexLabel(sex: string | null | undefined): string | null {
   to {
     transform: rotate(360deg);
   }
+}
+
+.phase-stale-dot {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.7;
+  margin-left: 1px;
+}
+
+.stale-plan-note {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+  font-style: italic;
+  letter-spacing: 0.1px;
 }
 </style>

@@ -552,3 +552,20 @@ pub async fn discharge_patient(pool: &SqlitePool, input: &OutcomeInput) -> Resul
   tx.commit().await?;
   Ok(())
 }
+
+/// Return the `phase_end_expected` of the intensive plan for `hn`, or `None`.
+/// The intensive plan row may have `is_current = 0` if the patient has already
+/// transitioned to continuation — we still need this date for the E-overrun check.
+pub async fn get_intensive_phase_end(pool: &SqlitePool, hn: &str) -> Result<Option<String>> {
+  let row: Option<Option<String>> = sqlx::query_scalar(
+    "SELECT phase_end_expected \
+         FROM   tb_treatment_plans \
+         WHERE  hn = ? AND phase = 'intensive' \
+         ORDER  BY created_at ASC \
+         LIMIT  1",
+  )
+  .bind(hn)
+  .fetch_optional(pool)
+  .await?;
+  Ok(row.flatten())
+}

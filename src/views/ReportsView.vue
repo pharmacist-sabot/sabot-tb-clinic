@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-vue-next'
 import { usePatientStore } from '@/stores/patient'
+import type { TreatmentPlan } from '@/types/treatment'
 
 const patientStore = usePatientStore()
 
@@ -21,15 +22,23 @@ onMounted(() => {
   patientStore.fetchActivePatients()
 })
 
+function getEffectivePhase(plan: TreatmentPlan | null | undefined): 'intensive' | 'continuation' | null {
+  if (!plan) return null
+  if (plan.phase === 'intensive' && plan.phase_end_expected) {
+    if (new Date() > new Date(plan.phase_end_expected)) return 'continuation'
+  }
+  return plan.phase as 'intensive' | 'continuation'
+}
+
 // ── Derived stats ────────────────────────────────────────────────────
 const totalActive = computed(() => patientStore.activePatients.length)
 
 const intensiveCount = computed(
-  () => patientStore.activePatients.filter((p) => p.current_plan?.phase === 'intensive').length,
+  () => patientStore.activePatients.filter((p) => getEffectivePhase(p.current_plan) === 'intensive').length,
 )
 
 const continuationCount = computed(
-  () => patientStore.activePatients.filter((p) => p.current_plan?.phase === 'continuation').length,
+  () => patientStore.activePatients.filter((p) => getEffectivePhase(p.current_plan) === 'continuation').length,
 )
 
 const overdueCount = computed(
@@ -108,7 +117,7 @@ const reportCards = computed<ReportCard[]>(() => [
     valueColor: '#dd5b00',
     value: overdueCount.value,
     label: 'ผู้ป่วยไม่ได้รับยา > 35 วัน',
-    description: 'ผู้ป่วยที่ไม่มีประวัติรับยานาน > 60 วัน',
+    description: 'ผู้ป่วยที่ไม่ได้รับยานาน > 35 วัน (แจ้งเตือน) หรือ > 60 วัน (ขาดการติดตาม)',
     available: true,
   },
   {
@@ -141,9 +150,9 @@ function exportCSV() {
     p.tb_patient.hn,
     p.demographics?.full_name ?? '-',
     p.current_plan?.regimen ?? '-',
-    p.current_plan?.phase === 'intensive'
+    getEffectivePhase(p.current_plan) === 'intensive'
       ? 'ระยะเข้มข้น'
-      : p.current_plan?.phase === 'continuation'
+      : getEffectivePhase(p.current_plan) === 'continuation'
         ? 'ระยะต่อเนื่อง'
         : '-',
     p.current_month !== null
@@ -336,11 +345,11 @@ function exportCSV() {
               <!-- Phase -->
               <td>
                 <span
-                  v-if="p.current_plan?.phase"
+                  v-if="getEffectivePhase(p.current_plan)"
                   class="phase-chip"
-                  :class="p.current_plan.phase === 'intensive' ? 'phase-intensive' : 'phase-continuation'"
+                  :class="getEffectivePhase(p.current_plan) === 'intensive' ? 'phase-intensive' : 'phase-continuation'"
                 >
-                  {{ p.current_plan.phase === 'intensive' ? 'Intensive' : 'Continuation' }}
+                  {{ getEffectivePhase(p.current_plan) === 'intensive' ? 'Intensive' : 'Continuation' }}
                 </span>
                 <span v-else class="muted-dash">—</span>
               </td>

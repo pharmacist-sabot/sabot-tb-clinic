@@ -64,6 +64,7 @@ export interface ActivePatientRow {
   current_month: number | null
   total_months: number | null
   days_since_last_dispensing: number | null
+  outcome_value: string | null
   alerts: import('./alert').PatientAlert[]
 }
 

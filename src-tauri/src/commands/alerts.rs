@@ -1,3 +1,4 @@
+use crate::commands::patients::compute_alerts_for_patient;
 use crate::commands::settings::MySqlState;
 use crate::db;
 use crate::models::alert::PatientAlert;
@@ -55,83 +56,18 @@ pub async fn get_patient_alerts(
       None
     };
 
-    // 1. Overdue dispensing (> 35 days, not yet lost to follow-up)
-    if let Some(days) = days_since_last {
-      if days > 35 && days <= 60 {
-        all_alerts.push(PatientAlert {
-          hn: patient.hn.clone(),
-          alert_type: "overdue".to_string(),
-          severity: "red".to_string(),
-          message: format!("ไม่ได้รับยานาน {} วัน", days),
-          details: None,
-        });
-      }
-    }
+    let patient_alerts = compute_alerts_for_patient(
+      &patient.hn,
+      &current_plan,
+      current_month,
+      total_months,
+      days_since_last,
+      mysql_pool,
+      &sqlite,
+    )
+    .await;
 
-    // 2. Lost to follow-up (> 60 days)
-    if let Some(days) = days_since_last {
-      if days > 60 {
-        all_alerts.push(PatientAlert {
-          hn: patient.hn.clone(),
-          alert_type: "lost_to_followup".to_string(),
-          severity: "red".to_string(),
-          message: format!("ขาดการติดตาม {} วัน", days),
-          details: None,
-        });
-      }
-    }
-
-    // 3. Ethambutol overrun & phase-transition alerts (requires MySQL)
-    if let Some(pool) = mysql_pool {
-      // 3a. Patient is in continuation phase but E was dispensed recently
-      if let Some(plan) = &current_plan {
-        if plan.phase == "continuation" {
-          if let Ok(true) =
-            db::mysql::was_ethambutol_dispensed_recently(pool, &patient.hn, 30).await
-          {
-            all_alerts.push(PatientAlert {
-              hn: patient.hn.clone(),
-              alert_type: "ethambutol_overrun".to_string(),
-              severity: "red".to_string(),
-              message: "ได้รับ Ethambutol เกินระยะ Intensive Phase".to_string(),
-              details: None,
-            });
-          }
-        }
-      }
-
-      // 3b. Still in intensive phase but expected end date has passed
-      if let Some(plan) = &current_plan {
-        if plan.phase == "intensive" {
-          if let Some(end_str) = &plan.phase_end_expected {
-            if let Ok(end_date) = NaiveDate::parse_from_str(end_str, "%Y-%m-%d") {
-              if today > end_date {
-                all_alerts.push(PatientAlert {
-                  hn: patient.hn.clone(),
-                  alert_type: "phase_transition".to_string(),
-                  severity: "yellow".to_string(),
-                  message: "ถึงเวลาเปลี่ยนเป็น Continuation Phase".to_string(),
-                  details: Some(format!("Phase end expected: {}", end_str)),
-                });
-              }
-            }
-          }
-        }
-      }
-    }
-
-    // 4. Total treatment duration exceeded
-    if let (Some(cur_month), Some(total)) = (current_month, total_months) {
-      if cur_month > total {
-        all_alerts.push(PatientAlert {
-          hn: patient.hn.clone(),
-          alert_type: "treatment_complete".to_string(),
-          severity: "yellow".to_string(),
-          message: "ครบกำหนดระยะการรักษาแล้ว".to_string(),
-          details: None,
-        });
-      }
-    }
+    all_alerts.extend(patient_alerts);
   }
 
   Ok(all_alerts)

@@ -7,6 +7,14 @@ import ProgressBar from './ProgressBar.vue'
 import DrugChip from '@/components/shared/DrugChip.vue'
 import type { ActivePatientRow } from '@/types/patient'
 
+/** Parse regimen string "2HRZE/4HR" → continuation drug letters ["H","R"] */
+function getContinuationDrugsFromRegimen(regimen: string): string[] {
+  const parts = regimen.split('/')
+  if (parts.length < 2) return ['H', 'R']
+  const contPart = parts[1].replace(/^\d+/, '') // strip leading digit e.g. "4HR" → "HR"
+  return (['H', 'R', 'Z', 'E'] as const).filter((d) => contPart.toUpperCase().includes(d))
+}
+
 const props = defineProps<{ patient: ActivePatientRow }>()
 const emit = defineEmits<{
   'view-detail': [hn: string]
@@ -19,17 +27,33 @@ const router = useRouter()
 const name = computed(() => props.patient.demographics?.full_name ?? props.patient.tb_patient.hn)
 const age = computed(() => props.patient.demographics?.age)
 
+// Derives the "real" current phase from the date, not just the SQLite record.
+// If the intensive phase end date has passed but the plan was never updated,
+// we still show "Continuation" so staff see the correct clinical picture.
+const effectivePhase = computed<'intensive' | 'continuation' | null>(() => {
+  const plan = props.patient.current_plan
+  if (!plan) return null
+  if (plan.phase === 'intensive' && plan.phase_end_expected) {
+    if (new Date() > new Date(plan.phase_end_expected)) return 'continuation'
+  }
+  return plan.phase as 'intensive' | 'continuation'
+})
+
+// True when the SQLite plan record hasn't been updated yet but the phase has
+// effectively changed based on the expected end date.
+const phaseIsStale = computed(
+  () => !!props.patient.current_plan && effectivePhase.value !== props.patient.current_plan.phase,
+)
+
 const phaseLabel = computed(() => {
-  const ph = props.patient.current_plan?.phase
-  if (ph === 'intensive') return 'Intensive'
-  if (ph === 'continuation') return 'Continuation'
+  if (effectivePhase.value === 'intensive') return 'Intensive'
+  if (effectivePhase.value === 'continuation') return 'Continuation'
   return '-'
 })
 
 const phaseColor = computed(() => {
-  const ph = props.patient.current_plan?.phase
-  if (ph === 'intensive') return '#dd5b00'
-  if (ph === 'continuation') return '#2a9d99'
+  if (effectivePhase.value === 'intensive') return '#dd5b00'
+  if (effectivePhase.value === 'continuation') return '#2a9d99'
   return '#a39e98'
 })
 
@@ -51,9 +75,17 @@ const sexSymbol = computed(() => {
 
 const isOverdue = computed(() => (props.patient.days_since_last_dispensing ?? 0) > 35)
 
-function getDrugsFromPlan(): string[] {
+// Returns drug letters to display.
+// When the plan is stale (still says "intensive" but end date passed), derive
+// the expected continuation drugs from the regimen string.
+function getDisplayDrugs(): string[] {
+  const plan = props.patient.current_plan
+  if (!plan) return []
+  if (phaseIsStale.value) {
+    return getContinuationDrugsFromRegimen(plan.regimen)
+  }
   try {
-    const drugs = JSON.parse(props.patient.current_plan?.drugs ?? '[]')
+    const drugs = JSON.parse(plan.drugs ?? '[]')
     return Array.isArray(drugs) ? drugs : []
   } catch {
     return []
@@ -96,11 +128,12 @@ function handleDischarge() {
         <span class="tb-type-badge">{{ tbTypeLabel }}</span>
         <span
           class="phase-badge"
-          :style="{
-            background: phaseColor + '20',
-            color: phaseColor,
-          }"
-        >{{ phaseLabel }}</span>
+          :style="{ background: phaseColor + '20', color: phaseColor }"
+          :title="phaseIsStale ? 'ระยะนี้อ้างอิงจากวันที่ — แผนการรักษาในระบบยังไม่ได้อัปเดต' : undefined"
+        >
+          {{ phaseLabel }}
+          <span v-if="phaseIsStale" class="phase-stale-dot" title="แผนยังไม่ได้อัปเดต">*</span>
+        </span>
       </div>
     </div>
 
@@ -108,9 +141,9 @@ function handleDischarge() {
     <div class="card-regimen">
       <span class="regimen-label">สูตรยา</span>
       <span class="regimen-value">{{ patient.current_plan?.regimen ?? '-' }}</span>
-      <div class="drug-chips" v-if="getDrugsFromPlan().length > 0">
+      <div class="drug-chips" v-if="getDisplayDrugs().length > 0">
         <DrugChip
-          v-for="d in getDrugsFromPlan()"
+          v-for="d in getDisplayDrugs()"
           :key="d"
           :drug="d"
           size="sm"
@@ -275,6 +308,13 @@ function handleDischarge() {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.phase-stale-dot {
+  font-size: 10px;
+  font-weight: 800;
+  opacity: 0.7;
+  margin-left: 1px;
 }
 
 /* ── Regimen ── */

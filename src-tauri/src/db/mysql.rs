@@ -353,6 +353,28 @@ pub async fn was_ethambutol_dispensed_recently(
   Ok(count > 0)
 }
 
+/// Return `true` if Pyrazinamide (Z, icode 1000258) OR Ethambutol
+/// (E, icodes 1600004 / 1000129) was dispensed to `hn` within the last
+/// `days` calendar days.
+///
+/// Used to distinguish:
+///   • Still receiving Z/E → patient is in intensive phase drugs (transition needed)
+///   • No Z/E dispensed   → patient is likely already on continuation drugs (plan needs update)
+pub async fn was_ze_dispensed_recently(pool: &MySqlPool, hn: &str, days: i64) -> Result<bool> {
+  let count: i64 = sqlx::query_scalar(
+    "SELECT COUNT(*) \
+         FROM opitemrece \
+         WHERE hn = ? \
+           AND icode IN ('1600004','1000129','1000258') \
+           AND vstdate >= CURDATE() - INTERVAL ? DAY",
+  )
+  .bind(hn)
+  .bind(days)
+  .fetch_one(pool)
+  .await?;
+  Ok(count > 0)
+}
+
 /// Fetch upcoming TB clinic appointments from HOSxP `oapp` (clinic code `009`).
 ///
 /// Returns every appointment whose `nextdate` falls between today and

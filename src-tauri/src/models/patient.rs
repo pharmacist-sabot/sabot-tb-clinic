@@ -77,6 +77,7 @@ pub struct ActivePatientRow {
   pub current_month: Option<i64>,
   pub total_months: Option<i64>,
   pub days_since_last_dispensing: Option<i64>,
+  pub outcome_value: Option<String>,
   pub alerts: Vec<PatientAlert>,
 }
 
