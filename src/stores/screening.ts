@@ -8,7 +8,21 @@ export const useScreeningStore = defineStore('screening', () => {
   const isLoading = ref(false)
   const error = ref<string | null>(null)
   const selectedHns = ref<Set<string>>(new Set())
+  const today = new Date()
+  function formatDate(d: Date): string {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+  const dateTo = formatDate(today)
+  const oneYearAgo = new Date(today)
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+  const dateFrom = formatDate(oneYearAgo)
+
   const filters = ref<SearchFilters>({
+    date_from: dateFrom,
+    date_to: dateTo,
     enrollment_status: 'all',
     page: 1,
     page_size: 50,
