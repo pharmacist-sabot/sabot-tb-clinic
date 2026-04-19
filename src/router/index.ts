@@ -7,6 +7,7 @@ import ReportsView from '@/views/ReportsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import AppointmentsView from '@/views/AppointmentsView.vue'
 import AboutView from '@/views/AboutView.vue'
+import MappingView from '@/views/MappingView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -45,6 +46,12 @@ const router = createRouter({
       component: PatientDetailView,
       props: true,
       meta: { title: 'รายละเอียดผู้ป่วย' },
+    },
+    {
+      path: '/mapping',
+      name: 'mapping',
+      component: MappingView,
+      meta: { title: 'แผนที่การกระจายโรค' },
     },
     {
       path: '/reports',

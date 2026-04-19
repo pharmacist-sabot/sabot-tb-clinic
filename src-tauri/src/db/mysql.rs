@@ -3,7 +3,7 @@ use crate::models::patient::{
   AppointmentRecord, PatientDemographics, PatientDrugRecord, SearchFilters,
 };
 use anyhow::Result;
-use sqlx::MySqlPool;
+use sqlx::{MySqlPool, QueryBuilder};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -266,6 +266,55 @@ pub async fn get_patient_demographics(
     phone: r.phone,
     birthday: r.birthday,
   }))
+}
+
+pub async fn get_patient_demographics_by_hns(
+  pool: &MySqlPool,
+  hns: &[String],
+) -> Result<HashMap<String, PatientDemographics>> {
+  if hns.is_empty() {
+    return Ok(HashMap::new());
+  }
+
+  let mut query = QueryBuilder::<sqlx::MySql>::new(
+    "SELECT \
+            p.hn, \
+            CONCAT(COALESCE(p.pname, ''), p.fname, ' ', p.lname) AS full_name, \
+            TIMESTAMPDIFF(YEAR, p.birthday, CURDATE()) AS age, \
+            p.sex, \
+            p.informaddr AS address, \
+            p.hometel AS phone, \
+            DATE_FORMAT(p.birthday, '%Y-%m-%d') AS birthday \
+        FROM patient p \
+        WHERE p.hn IN (",
+  );
+
+  let mut separated = query.separated(", ");
+  for hn in hns {
+    separated.push_bind(hn);
+  }
+  separated.push_unseparated(")");
+
+  let rows: Vec<DemographicsRow> = query.build_query_as().fetch_all(pool).await?;
+
+  Ok(
+    rows
+      .into_iter()
+      .map(|row| {
+        let key = row.hn.clone();
+        let value = PatientDemographics {
+          hn: row.hn,
+          full_name: row.full_name,
+          age: row.age,
+          sex: row.sex,
+          address: row.address,
+          phone: row.phone,
+          birthday: row.birthday,
+        };
+        (key, value)
+      })
+      .collect(),
+  )
 }
 
 /// Fetch every TB drug dispensing record for one HN from `opitemrece`, newest

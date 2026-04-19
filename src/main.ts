@@ -2,6 +2,9 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 
 // ── Disable macOS autocapitalize / autocorrect on all inputs ────────────────
 // WebKit on macOS auto-capitalises the first character of any <input> /

@@ -3,6 +3,7 @@ use chrono::{Datelike, Local, NaiveDate};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 
+use crate::models::mapping::TbPatientLocation;
 use crate::models::patient::{EnrollmentInput, TbPatient};
 use crate::models::treatment::{
   Followup, FollowupInput, Outcome, OutcomeInput, TreatmentPlan, TreatmentPlanUpdate,
@@ -114,6 +115,111 @@ pub async fn get_patient_by_hn(pool: &SqlitePool, hn: &str) -> Result<Option<TbP
   .fetch_optional(pool)
   .await
   .map_err(anyhow::Error::from)
+}
+
+/// Return all enrolled TB patients regardless of status, newest updates first.
+pub async fn get_all_tb_patients(pool: &SqlitePool) -> Result<Vec<TbPatient>> {
+  sqlx::query_as::<_, TbPatient>(
+    "SELECT id, hn, enrolled_at, enrolled_by, status, tb_type,
+                diagnosis_date, notes, created_at, updated_at
+         FROM   tb_patients
+         ORDER  BY updated_at DESC, enrolled_at DESC",
+  )
+  .fetch_all(pool)
+  .await
+  .map_err(anyhow::Error::from)
+}
+
+pub async fn get_all_patient_locations(
+  pool: &SqlitePool,
+) -> Result<HashMap<String, TbPatientLocation>> {
+  let rows = sqlx::query_as::<_, TbPatientLocation>(
+    "SELECT hn, raw_address, normalized_address, lat, lng, jittered_lat, jittered_lng,
+            geocode_status, geocode_error, geocode_attempts, geocoded_at, updated_at
+       FROM tb_patient_locations",
+  )
+  .fetch_all(pool)
+  .await?;
+
+  Ok(
+    rows
+      .into_iter()
+      .map(|row| (row.hn.clone(), row))
+      .collect::<HashMap<_, _>>(),
+  )
+}
+
+pub async fn get_patient_location(
+  pool: &SqlitePool,
+  hn: &str,
+) -> Result<Option<TbPatientLocation>> {
+  sqlx::query_as::<_, TbPatientLocation>(
+    "SELECT hn, raw_address, normalized_address, lat, lng, jittered_lat, jittered_lng,
+            geocode_status, geocode_error, geocode_attempts, geocoded_at, updated_at
+       FROM tb_patient_locations
+      WHERE hn = ?",
+  )
+  .bind(hn)
+  .fetch_optional(pool)
+  .await
+  .map_err(anyhow::Error::from)
+}
+
+#[derive(Debug, Clone)]
+pub struct UpsertPatientLocationInput {
+  pub hn: String,
+  pub raw_address: String,
+  pub normalized_address: Option<String>,
+  pub lat: Option<f64>,
+  pub lng: Option<f64>,
+  pub jittered_lat: Option<f64>,
+  pub jittered_lng: Option<f64>,
+  pub geocode_status: String,
+  pub geocode_error: Option<String>,
+  pub geocode_attempts: i64,
+  pub geocoded_at: Option<String>,
+}
+
+pub async fn upsert_patient_location(
+  pool: &SqlitePool,
+  input: &UpsertPatientLocationInput,
+) -> Result<()> {
+  let now = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+
+  sqlx::query(
+    "INSERT INTO tb_patient_locations
+        (hn, raw_address, normalized_address, lat, lng, jittered_lat, jittered_lng,
+         geocode_status, geocode_error, geocode_attempts, geocoded_at, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+     ON CONFLICT(hn) DO UPDATE SET
+        raw_address = excluded.raw_address,
+        normalized_address = excluded.normalized_address,
+        lat = excluded.lat,
+        lng = excluded.lng,
+        jittered_lat = excluded.jittered_lat,
+        jittered_lng = excluded.jittered_lng,
+        geocode_status = excluded.geocode_status,
+        geocode_error = excluded.geocode_error,
+        geocode_attempts = excluded.geocode_attempts,
+        geocoded_at = excluded.geocoded_at,
+        updated_at = excluded.updated_at",
+  )
+  .bind(&input.hn)
+  .bind(&input.raw_address)
+  .bind(&input.normalized_address)
+  .bind(input.lat)
+  .bind(input.lng)
+  .bind(input.jittered_lat)
+  .bind(input.jittered_lng)
+  .bind(&input.geocode_status)
+  .bind(&input.geocode_error)
+  .bind(input.geocode_attempts)
+  .bind(&input.geocoded_at)
+  .bind(&now)
+  .execute(pool)
+  .await?;
+
+  Ok(())
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
